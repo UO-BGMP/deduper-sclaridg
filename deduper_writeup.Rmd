@@ -37,18 +37,35 @@ PCR duplicates are two or more reads that were read from the same molecule in th
         - If the flag is `16`, then the returned value would be `"reverse"`.
         - For paired end data, if the flag is `145` (read paired, read reverse strand, and second in pair), then the returned value would be `"reverse"`.
 2. Correcting the start position for soft clipping
-    - **Description**: This function will take in the cigar string (`cigar_string`) for a read and see if it starts with the pattern of "number + S" (e.g. `^[0-9]+S`), which is indicative of soft clipping. If the cigar string starts with notation for soft clipping, isolate the number and minus it from the starting position (`POS`) found in the SAM record for that read. Save this value (e.g. `corrected_POS`) and return it. If the cigar string doesn't start with that pattern, then save the `POS` as `corrected_POS` and return that value.
+    - **Description**: This function will take in the cigar string (`cigar_string`) for a read and see if it starts with the pattern of "number + S" (e.g. `^[0-9]+S`), which is indicative of soft clipping. If the cigar string starts with notation for soft clipping, isolate the number and subtract it from the starting position (`POS`) found in the SAM record for that read. Save this value (e.g. `corrected_POS`) and return it. If the cigar string doesn't start with that pattern, then save the `POS` as `corrected_POS` and return that value.
     - **Function header**: `def POS_correct(cigar_string, POS):`
     - **Return statement**: `return corrected_POS`
     - **Test examples**: Similar to the first function, the cigar string and starting position will be saved as variables before the function is called, so the actual values won't be in the function.
         - If the starting position is `23440657` and the cigar string is `4S66M`, then the function would be called as `POS_correct(4S66M, 23440657)` and the retured value would be `23440653` (i.e. $23440657 - 4$).
         - If the starting position is `23440657` and the cigar string is `4S60M6S`, then the function would be called as `POS_correct(4S60M6S, 23440657)` and the retured value would still be `23440653`.
+        -  If the starting position is `23440657` and the cigar string is `70S`, then the function would be called as `POS_correct(70S, 23440657)` and the retured value would be `23440657`, i.e. no correction was made.
 
 ### Pseudocode
 
 First, `samtools sort` the file on the command line.
 
 ```
+def which_strand(bitwise_flag):
+    determine strand from bitwise flag
+    if 0x10 is checked:
+        strand is "reverse"
+    elif 0x10 isn't checked:
+        strand is "forward"
+    return strand
+
+def POS_correct(cigar_string, POS):
+    if cigar_string starts with number + S pattern:
+        take number and subtract from POS
+        save that number as corrected_POS
+    elif cigar_string doesn't start with that pattern:
+        save POS as corrected_POS
+    reutrn corrected_POS
+
 open umi list
     make dictionary of known UMIs (e.g. umi_dict) with counts of 0 as the values
 

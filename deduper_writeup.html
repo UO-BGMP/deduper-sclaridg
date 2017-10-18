@@ -160,13 +160,14 @@ $(document).ready(function () {
 </ul></li>
 <li>Correcting the start position for soft clipping
 <ul>
-<li><strong>Description</strong>: This function will take in the cigar string (<code>cigar_string</code>) for a read and see if it starts with the pattern of “number + S” (e.g. <code>^[0-9]+S</code>), which is indicative of soft clipping. If the cigar string starts with notation for soft clipping, isolate the number and minus it from the starting position (<code>POS</code>) found in the SAM record for that read. Save this value (e.g. <code>corrected_POS</code>) and return it. If the cigar string doesn’t start with that pattern, then save the <code>POS</code> as <code>corrected_POS</code> and return that value.</li>
+<li><strong>Description</strong>: This function will take in the cigar string (<code>cigar_string</code>) for a read and see if it starts with the pattern of “number + S” (e.g. <code>^[0-9]+S</code>), which is indicative of soft clipping. If the cigar string starts with notation for soft clipping, isolate the number and subtract it from the starting position (<code>POS</code>) found in the SAM record for that read. Save this value (e.g. <code>corrected_POS</code>) and return it. If the cigar string doesn’t start with that pattern, then save the <code>POS</code> as <code>corrected_POS</code> and return that value.</li>
 <li><strong>Function header</strong>: <code>def POS_correct(cigar_string, POS):</code></li>
 <li><strong>Return statement</strong>: <code>return corrected_POS</code></li>
 <li><strong>Test examples</strong>: Similar to the first function, the cigar string and starting position will be saved as variables before the function is called, so the actual values won’t be in the function.
 <ul>
 <li>If the starting position is <code>23440657</code> and the cigar string is <code>4S66M</code>, then the function would be called as <code>POS_correct(4S66M, 23440657)</code> and the retured value would be <code>23440653</code> (i.e. <span class="math inline">\(23440657 - 4\)</span>).</li>
 <li>If the starting position is <code>23440657</code> and the cigar string is <code>4S60M6S</code>, then the function would be called as <code>POS_correct(4S60M6S, 23440657)</code> and the retured value would still be <code>23440653</code>.</li>
+<li>If the starting position is <code>23440657</code> and the cigar string is <code>70S</code>, then the function would be called as <code>POS_correct(70S, 23440657)</code> and the retured value would be <code>23440657</code>, i.e. no correction was made.</li>
 </ul></li>
 </ul></li>
 </ol>
@@ -174,7 +175,23 @@ $(document).ready(function () {
 <div id="pseudocode" class="section level3">
 <h3>Pseudocode</h3>
 <p>First, <code>samtools sort</code> the file on the command line.</p>
-<pre><code>open umi list
+<pre><code>def which_strand(bitwise_flag):
+    determine strand from bitwise flag
+    if 0x10 is checked:
+        strand is &quot;reverse&quot;
+    elif 0x10 isn't checked:
+        strand is &quot;forward&quot;
+    return strand
+
+def POS_correct(cigar_string, POS):
+    if cigar_string starts with number + S pattern:
+        take number and subtract from POS
+        save that number as corrected_POS
+    elif cigar_string doesn't start with that pattern:
+        save POS as corrected_POS
+    reutrn corrected_POS
+
+open umi list
     make dictionary of known UMIs (e.g. umi_dict) with counts of 0 as the values
 
 make empty dictionary for tuples (e.g. tuple_dict)
