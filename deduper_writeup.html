@@ -124,6 +124,7 @@ $(document).ready(function () {
 </div>
 
 
+<hr />
 <div id="part-1" class="section level1">
 <h1>Part 1</h1>
 <div id="define-the-problem" class="section level3">
@@ -137,16 +138,82 @@ $(document).ready(function () {
 <li><strong>Sort</strong>: Start by sorting the SAM file with <code>samtools sort</code>, which sorts the alignments by chromosome and then leftmost position.</li>
 <li><strong>Check UMI</strong>: To filter outs reads with UMIs containing errors, extract the UMI from read name and compare it to the whitelist of 96 expected UMIs. If the UMI is not in the list, pass the read and don’t do anything. If the UMI exists, save the UMI and look at the chromosome.</li>
 <li><strong>Check Chromosome</strong>: Duplicates should be on the same chromosome. Save the chromosome, then look at the strand.</li>
-<li><strong>Check Strand</strong>: Duplicates should be on the same strand. Save the strand, then look at starting position.</li>
-<li><strong>Correct Start Position</strong>: If the cigar string contains an S, minus the number preceding the S (e.g. <code>^[0-9]+S</code>) from the start position of that alignment. Save this new start position. If the cigar string doesn’t contain an S, save the starting position as-is.</li>
+<li><strong>Check Strand</strong>: Duplicates should be on the same strand. Save the strand (determined from the bitwise flag), and then look at starting position.</li>
+<li><strong>Correct Start Position</strong>: If the beginning of the cigar string contains an S, minus the number preceding the S (e.g. <code>^[0-9]+S</code>) from the start position of that alignment. Save this new start position. If the cigar string doesn’t contain an S, save the starting position as-is.</li>
 <li><strong>Increment Dictionary</strong>: Make a tuple of the UMI, strand, chromosome, and start position (e.g. <code>(AAAAAAAA, 0, 14, 100000000)</code>). If the tuple exists in your dictionary, increment the counter and pass. This means that this is probably a PCR duplicate. If the tuple doesn’t exist, intialize it at a count of 1 and write the associated alignment to the output file.</li>
 </ul>
+</div>
+<div id="determine-high-level-functions" class="section level3">
+<h3>Determine High Level Functions</h3>
+<ol style="list-style-type: decimal">
+<li>Determing the strand
+<ul>
+<li><strong>Description</strong>: This function will look at the bitwise flag and determine if the read was from the forward or reverse strand. It wil be able to handle multiple different flag values that correspond to the 0x10 flag being checked or unchecked. The function will then return a string of <code>&quot;forward&quot;</code> or <code>&quot;reverse&quot;</code>.</li>
+<li><strong>Function header</strong>: <code>def which_strand(bitwise_flag):</code></li>
+<li><strong>Return statement</strong>: <code>return strand</code></li>
+<li><strong>Test examples</strong>: The bitwise flag will be saved as a variable before the function is called, so the actual value won’t be in the function.
+<ul>
+<li>If the flag is <code>0</code>, then the function would be called as <code>which_strand(0)</code>, and the returned value would be <code>&quot;forward&quot;</code>.</li>
+<li>If the flag is <code>16</code>, then the returned value would be <code>&quot;reverse&quot;</code>.</li>
+<li>For paired end data, if the flag is <code>145</code> (read paired, read reverse strand, and second in pair), then the returned value would be <code>&quot;reverse&quot;</code>.</li>
+</ul></li>
+</ul></li>
+<li>Correcting the start position for soft clipping
+<ul>
+<li><strong>Description</strong>: This function will take in the cigar string (<code>cigar_string</code>) for a read and see if it starts with the pattern of “number + S” (e.g. <code>^[0-9]+S</code>), which is indicative of soft clipping. If the cigar string starts with notation for soft clipping, isolate the number and minus it from the starting position (<code>POS</code>) found in the SAM record for that read. Save this value (e.g. <code>corrected_POS</code>) and return it. If the cigar string doesn’t start with that pattern, then save the <code>POS</code> as <code>corrected_POS</code> and return that value.</li>
+<li><strong>Function header</strong>: <code>def POS_correct(cigar_string, POS):</code></li>
+<li><strong>Return statement</strong>: <code>return corrected_POS</code></li>
+<li><strong>Test examples</strong>: Similar to the first function, the cigar string and starting position will be saved as variables before the function is called, so the actual values won’t be in the function.
+<ul>
+<li>If the starting position is <code>23440657</code> and the cigar string is <code>4S66M</code>, then the function would be called as <code>POS_correct(4S66M, 23440657)</code> and the retured value would be <code>23440653</code> (i.e. <span class="math inline">\(23440657 - 4\)</span>).</li>
+<li>If the starting position is <code>23440657</code> and the cigar string is <code>4S60M6S</code>, then the function would be called as <code>POS_correct(4S60M6S, 23440657)</code> and the retured value would still be <code>23440653</code>.</li>
+</ul></li>
+</ul></li>
+</ol>
+</div>
+<div id="pseudocode" class="section level3">
+<h3>Pseudocode</h3>
+<p>First, <code>samtools sort</code> the file on the command line.</p>
+<pre><code>open umi list
+    make dictionary of known UMIs (e.g. umi_dict) with counts of 0 as the values
+
+make empty dictionary for tuples (e.g. tuple_dict)
+
+initialize chromosome variable as &quot;1&quot; (see &quot;prev_chrom&quot; check below)
+
+open file:
+    for each alignment:
+        # check UMI
+        if UMI in umi_dict:
+            increment counter
+            save UMI
+        else:
+            pass and go to next alignment (break)
+        save bitwise flag
+        save strand using my which_strand function, which takes the bitwise flag
+        isolate chromosome, for chromosome:
+            save previous chromosome to new variable prev_chrom
+            save new chromosome
+            if this new chromosome is not the same as the prev_chrom:
+                empty the tuple_dict
+            if this chromosome is the same as the prev_chrom:
+                pass
+        save starting position
+        save cigar string
+        save corrected starting position using my POS_correct function
+        # Corrected starting position could be the same as the starting position
+        make tuple of (UMI, chromosome, strand, corrected starting position)
+        if tuple is in tuple_dict:
+            increment and pass
+        else if tuple is not in tuple_dict:
+            write current alignment to output file
+            initialize tuple key with value as 1</code></pre>
 </div>
 <div id="example-sam-file" class="section level3">
 <h3>Example SAM File</h3>
 <ul>
 <li>There are two expected UMIs in this sample file: <code>AAAAAAAA</code> and <code>TTTTTTTT</code></li>
-<li>The file contains 15 SAM records (no SAM header)</li>
+<li>The file contains 15 single-end SAM records (no SAM header)</li>
 <li>Assume that thhis file has already been put through <code>samtools sort</code></li>
 </ul>
 <pre><code>query_information:AAAAAAAA  0   1   67240000    36  70M *   0   0   AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA  GCEEAEEEEEEEAEEEEEEEEEEEEEEEEEEEEEEEAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
@@ -166,67 +233,22 @@ query_information:AAAAAAAA  0   2   67240000    36  70M *   0   0   AAAAAAAAAAAA
 query_information:TTTTTATT  16  2   67240000    36  70M *   0   0   AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA  GCEEAEEEEEEEAEEEEEEEEEEEEEEEEEEEEEEEAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE</code></pre>
 <p>Below is a breakdown of the 15 records and their expected tuples. There should be 7 records in the output file, denoted by “First instance of this tuple”.</p>
 <ol style="list-style-type: decimal">
-<li><code>(AAAAAAAA, 0, 1, 67240000)</code>: First instance of this tuple</li>
-<li><code>(AAAAAAAA, 0, 1, 67240000)</code>: Duplicate of Record 1</li>
-<li><code>(AAAAATAA, 0, 1, 67240000)</code>: UMI contains error</li>
-<li><code>(TTTTTTTT, 0, 1, 67240000)</code>: First instance of this tuple</li>
-<li><code>(AAAAAAAA, 16, 1, 67240000)</code>: First instance of this tuple</li>
-<li><code>(AAAAAAAA, 16, 1, 67240000)</code>: Duplicate of Record 6</li>
-<li><code>(TTTTTTTT, 0, 1, 67240000)</code>: Duplicate of Record 4</li>
-<li><code>(TTTTTTTT, 0, 1, 67240000)</code>: Duplicate of Record 4</li>
-<li><code>(AAAAAAAA, 0, 1, 67240000)</code>: Duplicate of Record 1 (soft-clipped by 2)</li>
-<li><code>(TTTTTTTT, 0, 1, 67240000)</code>: Duplicate of Record 4(soft-clipped by 4)</li>
-<li><code>(AAAAAAAA, 0, 1, 67240005)</code>: First instance of this tuple (soft-clipped by 5)</li>
-<li><code>(AAAAAAAA, 0, 1, 67275000)</code>: First instance of this tuple</li>
-<li><code>(TTTTTTTT, 16, 1, 76540000)</code>: First instance of this tuple</li>
-<li><code>(AAAAAAAA, 0, 2, 67240000)</code>: First instance of this tuple</li>
-<li><code>(TTTTTATT, 16, 2, 67240000)</code>: UMI contains error</li>
+<li><code>(&quot;AAAAAAAA&quot;, &quot;forward&quot;, &quot;1&quot;, 67240000)</code>: First instance of this tuple</li>
+<li><code>(&quot;AAAAAAAA&quot;, &quot;forward&quot;, &quot;1&quot;, 67240000)</code>: Duplicate of Record 1</li>
+<li><code>(&quot;AAAAATAA&quot;, &quot;forward&quot;, &quot;1&quot;, 67240000)</code>: UMI contains error</li>
+<li><code>(&quot;TTTTTTTT&quot;, &quot;forward&quot;, &quot;1&quot;, 67240000)</code>: First instance of this tuple</li>
+<li><code>(&quot;AAAAAAAA&quot;, &quot;reverse&quot;, &quot;1&quot;, 67240000)</code>: First instance of this tuple</li>
+<li><code>(&quot;AAAAAAAA&quot;, &quot;reverse&quot;, &quot;1&quot;, 67240000)</code>: Duplicate of Record 6</li>
+<li><code>(&quot;TTTTTTTT&quot;, &quot;forward&quot;, &quot;1&quot;, 67240000)</code>: Duplicate of Record 4</li>
+<li><code>(&quot;TTTTTTTT&quot;, &quot;forward&quot;, &quot;1&quot;, 67240000)</code>: Duplicate of Record 4</li>
+<li><code>(&quot;AAAAAAAA&quot;, &quot;forward&quot;, &quot;1&quot;, 67240000)</code>: Duplicate of Record 1 (soft clipped by 2)</li>
+<li><code>(&quot;TTTTTTTT&quot;, &quot;forward&quot;, &quot;1&quot;, 67240000)</code>: Duplicate of Record 4(soft clipped by 4)</li>
+<li><code>(&quot;AAAAAAAA&quot;, &quot;forward&quot;, &quot;1&quot;, 67240005)</code>: First instance of this tuple (soft-clipped by 5)</li>
+<li><code>(&quot;AAAAAAAA&quot;, &quot;forward&quot;, &quot;1&quot;, 67275000)</code>: First instance of this tuple</li>
+<li><code>(&quot;TTTTTTTT&quot;, &quot;reverse&quot;, &quot;1&quot;, 76540000)</code>: First instance of this tuple</li>
+<li><code>(&quot;AAAAAAAA&quot;, &quot;forward&quot;, &quot;2&quot;, 67240000)</code>: First instance of this tuple</li>
+<li><code>(&quot;TTTTTATT&quot;, &quot;reverse&quot;, &quot;2&quot;, 67240000)</code>: UMI contains error</li>
 </ol>
-</div>
-<div id="pseudocode" class="section level3">
-<h3>Pseudocode</h3>
-<p>First, <code>samtools sort</code> the file on the command line.</p>
-<pre><code>open umi list
-    make dictionary of known UMIs (e.g. umi_dict), counts of 0 as the values
-
-make empty dictionary for tuples (e.g. tuple_dict)
-
-initialize chromosome variable (see &quot;prev_chrom&quot; check below)
-
-open file:
-    for each alignment:
-        # check UMI
-        if UMI in umi_dict:
-            increment counter
-            save UMI
-        else:
-            pass and go to next alignment (break)
-        save strand (from bitwise flag, 0 or 16)
-        isolate chromosome, for chromosome:
-            save previous chromosome to new variable prev_chrom
-            save new chromosome
-            if this new chromosome is not the same as the prev_chrom:
-                empty the tuple_dict
-            if this chromosome is the same as the prev_chrom:
-                pass
-        save starting position
-        save cigar string
-        if cigar string doesn't contain soft clipping notation:
-            make tuple of UMI, chromosome, strand, starting position
-            if tuple is in tuple_dict:
-                increment and pass
-            else if tuple is not in tuple_dict:
-                initialize tuple key with value as 1
-                write current alignment to output file
-        else if cigar_string contains soft clipping notation:
-            save number preceding &quot;S&quot; (clipped_num)
-            minus clipped_num from starting position (new_start_pos)
-            make tuple of UMI, chromosom, strand, new_start_pos
-            if tuple is in tuple_dict:
-                increment and pass
-            else if tuple is not in tuple_dict:
-                initialize tuple key with value as 1
-                write current alignment to output file</code></pre>
 </div>
 <div id="expected-output" class="section level3">
 <h3>Expected Output</h3>

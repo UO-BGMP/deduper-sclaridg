@@ -6,6 +6,9 @@ output: html_document
 ---
 
 
+--------------------------------------------------------------------------------
+
+
 Part 1
 ================================================================================
 
@@ -19,14 +22,73 @@ PCR duplicates are two or more reads that were read from the same molecule in th
 - **Sort**: Start by sorting the SAM file with `samtools sort`, which sorts the alignments by chromosome and then leftmost position.
 - **Check UMI**: To filter outs reads with UMIs containing errors, extract the UMI from read name and compare it to the whitelist of 96 expected UMIs. If the UMI is not in the list, pass the read and don't do anything. If the UMI exists, save the UMI and look at the chromosome.
 - **Check Chromosome**: Duplicates should be on the same chromosome. Save the chromosome, then look at the strand.
-- **Check Strand**: Duplicates should be on the same strand. Save the strand, then look at starting position.
-- **Correct Start Position**: If the cigar string contains an S, minus the number preceding the S (e.g. `^[0-9]+S`) from the start position of that alignment. Save this new start position. If the cigar string doesn't contain an S, save the starting position as-is.
+- **Check Strand**: Duplicates should be on the same strand. Save the strand (determined from the bitwise flag), and then look at starting position.
+- **Correct Start Position**: If the beginning of the cigar string contains an S, minus the number preceding the S (e.g. `^[0-9]+S`) from the start position of that alignment. Save this new start position. If the cigar string doesn't contain an S, save the starting position as-is.
 - **Increment Dictionary**: Make a tuple of the UMI, strand, chromosome, and start position (e.g. `(AAAAAAAA, 0, 14, 100000000)`). If the tuple exists in your dictionary, increment the counter and pass. This means that this is probably a PCR duplicate. If the tuple doesn't exist, intialize it at a count of 1 and write the associated alignment to the output file.
+
+### Determine High Level Functions
+
+1. Determing the strand
+    - **Description**: This function will look at the bitwise flag and determine if the read was from the forward or reverse strand. It wil be able to handle multiple different flag values that correspond to the 0x10 flag being checked or unchecked. The function will then return a string of `"forward"` or `"reverse"`.
+    - **Function header**: `def which_strand(bitwise_flag):`
+    - **Return statement**: `return strand`
+    - **Test examples**: The bitwise flag will be saved as a variable before the function is called, so the actual value won't be in the function.
+        - If the flag is `0`, then the function would be called as `which_strand(0)`, and the returned value would be `"forward"`.
+        - If the flag is `16`, then the returned value would be `"reverse"`.
+        - For paired end data, if the flag is `145` (read paired, read reverse strand, and second in pair), then the returned value would be `"reverse"`.
+2. Correcting the start position for soft clipping
+    - **Description**: This function will take in the cigar string (`cigar_string`) for a read and see if it starts with the pattern of "number + S" (e.g. `^[0-9]+S`), which is indicative of soft clipping. If the cigar string starts with notation for soft clipping, isolate the number and minus it from the starting position (`POS`) found in the SAM record for that read. Save this value (e.g. `corrected_POS`) and return it. If the cigar string doesn't start with that pattern, then save the `POS` as `corrected_POS` and return that value.
+    - **Function header**: `def POS_correct(cigar_string, POS):`
+    - **Return statement**: `return corrected_POS`
+    - **Test examples**: Similar to the first function, the cigar string and starting position will be saved as variables before the function is called, so the actual values won't be in the function.
+        - If the starting position is `23440657` and the cigar string is `4S66M`, then the function would be called as `POS_correct(4S66M, 23440657)` and the retured value would be `23440653` (i.e. $23440657 - 4$).
+        - If the starting position is `23440657` and the cigar string is `4S60M6S`, then the function would be called as `POS_correct(4S60M6S, 23440657)` and the retured value would still be `23440653`.
+
+### Pseudocode
+
+First, `samtools sort` the file on the command line.
+
+```
+open umi list
+    make dictionary of known UMIs (e.g. umi_dict) with counts of 0 as the values
+
+make empty dictionary for tuples (e.g. tuple_dict)
+
+initialize chromosome variable as "1" (see "prev_chrom" check below)
+
+open file:
+    for each alignment:
+        # check UMI
+        if UMI in umi_dict:
+            increment counter
+            save UMI
+        else:
+            pass and go to next alignment (break)
+        save bitwise flag
+        save strand using my which_strand function, which takes the bitwise flag
+        isolate chromosome, for chromosome:
+            save previous chromosome to new variable prev_chrom
+            save new chromosome
+            if this new chromosome is not the same as the prev_chrom:
+                empty the tuple_dict
+            if this chromosome is the same as the prev_chrom:
+                pass
+        save starting position
+        save cigar string
+        save corrected starting position using my POS_correct function
+        # Corrected starting position could be the same as the starting position
+        make tuple of (UMI, chromosome, strand, corrected starting position)
+        if tuple is in tuple_dict:
+            increment and pass
+        else if tuple is not in tuple_dict:
+            write current alignment to output file
+            initialize tuple key with value as 1
+```
 
 ### Example SAM File
 
 - There are two expected UMIs in this sample file: `AAAAAAAA` and `TTTTTTTT`
-- The file contains 15 SAM records (no SAM header)
+- The file contains 15 single-end SAM records (no SAM header)
 - Assume that thhis file has already been put through `samtools sort`
 
 ```
@@ -49,71 +111,21 @@ query_information:TTTTTATT	16	2	67240000	36	70M	*	0	0	AAAAAAAAAAAAAAAAAAAAAAAAAA
 
 Below is a breakdown of the 15 records and their expected tuples. There should be 7 records in the output file, denoted by "First instance of this tuple".
 
-1. `(AAAAAAAA, 0, 1, 67240000)`: First instance of this tuple
-2. `(AAAAAAAA, 0, 1, 67240000)`: Duplicate of Record 1
-3. `(AAAAATAA, 0, 1, 67240000)`: UMI contains error
-4. `(TTTTTTTT, 0, 1, 67240000)`: First instance of this tuple
-5. `(AAAAAAAA, 16, 1, 67240000)`: First instance of this tuple
-6. `(AAAAAAAA, 16, 1, 67240000)`: Duplicate of Record 6
-7. `(TTTTTTTT, 0, 1, 67240000)`: Duplicate of Record 4
-8. `(TTTTTTTT, 0, 1, 67240000)`: Duplicate of Record 4
-9. `(AAAAAAAA, 0, 1, 67240000)`: Duplicate of Record 1 (soft-clipped by 2)
-10. `(TTTTTTTT, 0, 1, 67240000)`: Duplicate of Record 4(soft-clipped by 4)
-11. `(AAAAAAAA, 0, 1, 67240005)`: First instance of this tuple (soft-clipped by 5)
-12. `(AAAAAAAA, 0, 1, 67275000)`: First instance of this tuple
-13. `(TTTTTTTT, 16, 1, 76540000)`: First instance of this tuple
-14. `(AAAAAAAA, 0, 2, 67240000)`: First instance of this tuple
-15. `(TTTTTATT, 16, 2, 67240000)`: UMI contains error
-
-
-### Pseudocode
-
-First, `samtools sort` the file on the command line.
-
-```
-open umi list
-    make dictionary of known UMIs (e.g. umi_dict), counts of 0 as the values
-
-make empty dictionary for tuples (e.g. tuple_dict)
-
-initialize chromosome variable (see "prev_chrom" check below)
-
-open file:
-    for each alignment:
-        # check UMI
-        if UMI in umi_dict:
-            increment counter
-            save UMI
-        else:
-            pass and go to next alignment (break)
-        save strand (from bitwise flag, 0 or 16)
-        isolate chromosome, for chromosome:
-            save previous chromosome to new variable prev_chrom
-            save new chromosome
-            if this new chromosome is not the same as the prev_chrom:
-                empty the tuple_dict
-            if this chromosome is the same as the prev_chrom:
-                pass
-        save starting position
-        save cigar string
-        if cigar string doesn't contain soft clipping notation:
-            make tuple of UMI, chromosome, strand, starting position
-            if tuple is in tuple_dict:
-                increment and pass
-            else if tuple is not in tuple_dict:
-                initialize tuple key with value as 1
-                write current alignment to output file
-        else if cigar_string contains soft clipping notation:
-            save number preceding "S" (clipped_num)
-            minus clipped_num from starting position (new_start_pos)
-            make tuple of UMI, chromosom, strand, new_start_pos
-            if tuple is in tuple_dict:
-                increment and pass
-            else if tuple is not in tuple_dict:
-                initialize tuple key with value as 1
-                write current alignment to output file
-```
-
+1. `("AAAAAAAA", "forward", "1", 67240000)`: First instance of this tuple
+2. `("AAAAAAAA", "forward", "1", 67240000)`: Duplicate of Record 1
+3. `("AAAAATAA", "forward", "1", 67240000)`: UMI contains error
+4. `("TTTTTTTT", "forward", "1", 67240000)`: First instance of this tuple
+5. `("AAAAAAAA", "reverse", "1", 67240000)`: First instance of this tuple
+6. `("AAAAAAAA", "reverse", "1", 67240000)`: Duplicate of Record 6
+7. `("TTTTTTTT", "forward", "1", 67240000)`: Duplicate of Record 4
+8. `("TTTTTTTT", "forward", "1", 67240000)`: Duplicate of Record 4
+9. `("AAAAAAAA", "forward", "1", 67240000)`: Duplicate of Record 1 (soft clipped by 2)
+10. `("TTTTTTTT", "forward", "1", 67240000)`: Duplicate of Record 4(soft clipped by 4)
+11. `("AAAAAAAA", "forward", "1", 67240005)`: First instance of this tuple (soft-clipped by 5)
+12. `("AAAAAAAA", "forward", "1", 67275000)`: First instance of this tuple
+13. `("TTTTTTTT", "reverse", "1", 76540000)`: First instance of this tuple
+14. `("AAAAAAAA", "forward", "2", 67240000)`: First instance of this tuple
+15. `("TTTTTATT", "reverse", "2", 67240000)`: UMI contains error
 
 ### Expected Output
 
