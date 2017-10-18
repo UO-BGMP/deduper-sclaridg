@@ -64,7 +64,7 @@ def POS_correct(cigar_string, POS):
         save that number as corrected_POS
     elif cigar_string doesn't start with that pattern:
         save POS as corrected_POS
-    reutrn corrected_POS
+    return corrected_POS
 
 open umi list
     make dictionary of known UMIs (e.g. umi_dict) with counts of 0 as the values
