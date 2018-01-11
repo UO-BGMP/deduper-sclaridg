@@ -1,0 +1,33 @@
+#!/bin/bash
+#SBATCH --partition=long        ### Partition (like a queue in PBS)
+#SBATCH --job-name=deduper     ### Job Name
+#SBATCH --output=/home/sclaridg/deduper_paired.out         ### File in which to store job output
+#SBATCH --error=/home/sclaridg/deduper_paired.err         ### File in which to store job error messages
+#SBATCH --time=0-00:30:00       ### Wall clock time limit in Days-HH:MM:SS
+#SBATCH --nodes=1               ### Node count required for the job
+#SBATCH --ntasks-per-node=28     ### Number of tasks to be launched per Node
+#SBATCH --mail-user=sclaridg@uoregon.edu
+#SBATCH --mail-type=ALL
+
+# Load modules
+ml samtools/1.5
+
+# Sort
+echo "Sorting files."
+
+# samtools sort -O sam -o Dataset1_sorted.sam Dataset1.sam
+# samtools sort -O sam -o Dataset2_sorted.sam Dataset2.sam
+# samtools sort -O sam -o paired_end_sorted.sam paired_end.sam
+
+# Run deduper script
+# echo "Deduping Dataset1_sorted.sam."
+# python claridge_deduper.py --file /home/sclaridg/Dataset1_sorted.sam --umi /home/sclaridg/STL96.txt
+# 
+# echo "Deduping Dataset2_sorted.sam."
+# python claridge_deduper.py --file /home/sclaridg/Dataset2_sorted.sam --umi /home/sclaridg/STL96.txt
+
+echo "Deduping paired_end_sorted.sam."
+python claridge_deduper.py --file /home/sclaridg/paired_end_sorted.sam --umi /home/sclaridg/STL96.txt --paired
+
+echo "Finished deduping all three SAM files."
+exit
