@@ -48,18 +48,18 @@ def paired_read_checker(flag):
     
     # Check if reads are paired
     if ((flag & 1) != 1):
-        raise NameError("ERROR: Exiting program. This is not paired-end data.")
+        raise ValueError("ERROR: Exiting program. This is not paired-end data.")
     
     # Check if reads are mapped in proper pairs
     if ((flag & 2) != 2):
-        raise NameError("ERROR: Exiting program. Encountered reads that were not mapped in proper pairs.")
+        raise ValueError("ERROR: Exiting program. Encountered reads that were not mapped in proper pairs.")
     
     # Check forward or reverse
     # Flags drived from Sequence Alignment/Map Format Specification (21 Aug 2017)
     # https://samtools.github.io/hts-specs/SAMv1.pdf
     
     if ((flag & 64) == 64):
-    	read = "forward"
+        read = "forward"
     if ((flag & 128) == 128):
         read = "reverse"
     return read
@@ -173,7 +173,7 @@ elif args.quality_filter == "mapq":
 ##### Read Through SAM File ##############################################################
 ##########################################################################################
 
-### Single-End############################################################################
+##### Single-End #########################################################################
 
 if args.paired == False:
 	print("Read type: Single-end.")
@@ -281,7 +281,7 @@ if args.paired == False:
 						# Add alignment if tuple not found in tuple_dict
 						tuple_dict[query_tuple] = line
 					
-### Paired-End ###########################################################################
+##### Paired-End #########################################################################
 
 if args.paired == True:
 	print("Read type: Paired-end.")
@@ -320,14 +320,14 @@ if args.paired == True:
 					singleton_dict[QNAME] = line1
 					continue
 				elif QNAME in singleton_dict:
-					line2 = singleton_dict.pop(QNAME)	  # Remove singleton from dictionary and save value to new variable
+					line2 = singleton_dict.pop(QNAME)	      # Remove singleton from dictionary and save value to new variable
 					line2_list = line2.strip("\n").split("\t")
 					
 					### Check UMI
 					umi = line1_list[0].split(":")[-1]
-					if args.umi is None:                  # If UMI flag was not set, assume randomers and do nothing
+					if args.umi is None:                      # If UMI flag was not set, assume randomers and do nothing
 						pass
-					elif args.umi is not None:            # If UMI flag was set
+					elif args.umi is not None:                # If UMI flag was set
 						umi_a = umi.split("^")[0]
 						umi_b = umi.split("^")[1]
 						if umi_a in umi_set and umi_b in umi_set:				  # If both UMIs are in the umi_set, do nothing
@@ -342,6 +342,7 @@ if args.paired == True:
 					### Check bitwise flags
 					flag1 = int(line1_list[1])
 					flag2 = int(line2_list[1])
+
 					# Check read for line1 and line2
 					read1 = paired_read_checker(flag1)
 					read2 = paired_read_checker(flag2)
