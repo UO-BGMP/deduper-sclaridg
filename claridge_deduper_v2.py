@@ -6,10 +6,11 @@ import re
 import sys
 import textwrap
 
-parser = argparse.ArgumentParser(description="Removes PCR duplicates from a SAM file of sorted (using samtools) and uniquely mapped reads (single- and paired-end). For each set of duplicates, one duplicate is printed to an output file. Given a list of known UMIs, alignments with unexpected UMIs are ignored. If the reads are paired, assumes reads are mapped in proper pairs", formatter_class=argparse.RawTextHelpFormatter)
+parser = argparse.ArgumentParser(description="Removes PCR duplicates from a SAM file (with .sam extension) of samtools sorted and uniquely mapped reads (single- and paired-end). For each set of duplicates, one duplicate is printed to an output file. Given a list of known UMIs, alignments with unexpected UMIs are ignored. If the reads are paired, assumes reads are mapped in proper pairs", formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument('-f','--file', help='absolute path to SAM file to be deduped', required=True, type=str)
 parser.add_argument('-p','--paired', help='if flag is set, indicates that reads are paired-end (default: single-end)', required=False, action='store_true', default=False)
 parser.add_argument('-u','--umi', help='absolute path to list of UMIs (default: randomers)', required=False, type=str)
+parser.add_argument('-n','--name', help='name output <FILENAME>_deduped.sam (default: <FILENAME>.sam_deduped)', default=False, action='store_true', required=False)
 parser.add_argument('-q','--quality_filter', help=textwrap.dedent('''if flag is set, duplicates will be quality filtered (default: first encountered duplicate)
 note that for paired-end reads, quality filter is dictated by forward read only
 options:
@@ -151,14 +152,19 @@ first_line = True
 
 ### Create output filename
 infile = args.file
-filename = infile.split("/")[-1].split(".")[0]   # Isolate file name
-deduped = "".join([filename, "_deduped"])        # Add "deduped"
-outfile = infile.replace(filename, deduped)      # Replace in original filepath
+if args.name == True:
+	filename = infile.split("/")[-1].split(".")[0]   # Isolate file name without .sam
+	deduped = "".join([filename, "_deduped"])        # Add "deduped" to filename
+	outfile = infile.replace(filename, deduped)      # Replace in original filepath
+	print("Opening %s.sam for reading and %s.sam for writing." % (filename, deduped))
+elif args.name == False:
+	filename = infile.split("/")[-1]				 # Isolate faile name with .sam
+	deduped = "".join([filename, "_deduped"])		 # Add "deduped" to filename
+	outfile = "".join([infile, "_deduped"])			 # Add "deduped" to original filepath
+	print("Opening %s for reading and %s for writing." % (filename, deduped))
 
 ### Get file linecount to be used in last line check
 total_lines = count_lines(infile)
-
-print("Opening %s.sam for reading and %s.sam for writing." % (filename, deduped))
 
 if args.quality_filter == False:
 	print("Quality filter: Default.")
@@ -296,7 +302,7 @@ if args.paired == True:
 			### Progress report
 			if linecount % 200000 == 0:
 				print("Passed line " + str(linecount) + ".")
-				
+
 			### Print out header lines
 			if line1.startswith("@") == True:
 				out.write(line1)
@@ -313,8 +319,12 @@ if args.paired == True:
 							out.write(value[1])
 					break
 				
-				### Check if paired reads are adjacent in sorted SAM file
+				### Check if data is paired by running paired_read_checker
 				line1_list = line1.strip("\n").split("\t")
+				flag1 = int(line1_list[1])
+				read = paired_read_checker(flag1)
+				
+				### Check if paired reads are adjacent in sorted SAM file
 				QNAME = line1_list[0]			
 				if QNAME not in singleton_dict:
 					singleton_dict[QNAME] = line1
@@ -346,6 +356,7 @@ if args.paired == True:
 					# Check read for line1 and line2
 					read1 = paired_read_checker(flag1)
 					read2 = paired_read_checker(flag2)
+					
 					# Reassign line and line_list variable names to f (forward) and r (reverse) based on read
 					if read1 == "reverse" and read2 == "forward":
 						line_f = line2
