@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-#claridge_deduper_v2.py
+
+# claridge_deduper.py
+# Sally Claridge
+# Due 15 January 2018
 
 import argparse
 import re
