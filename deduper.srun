@@ -1,0 +1,41 @@
+#!/bin/bash
+#SBATCH --partition=long        ### Partition (like a queue in PBS)
+#SBATCH --job-name=deduper     ### Job Name
+#SBATCH --output=/home/sclaridg/deduper_paired.out         ### File in which to store job output
+#SBATCH --error=/home/sclaridg/deduper_paired.err         ### File in which to store job error messages
+#SBATCH --time=0-00:15:00       ### Wall clock time limit in Days-HH:MM:SS
+#SBATCH --nodes=1               ### Node count required for the job
+#SBATCH --ntasks-per-node=28     ### Number of tasks to be launched per Node
+#SBATCH --mail-user=sclaridg@uoregon.edu
+#SBATCH --mail-type=ALL
+
+# Load modules
+ml samtools/1.5
+
+# Set directory variable
+DIR="/projects/bgmp/sclaridg/deduper"
+DATA_DIR="/projects/bgmp/shared/deduper/"
+
+# Sort with samtools
+echo "Sorting files."
+
+samtools sort -O sam -o $DIR/Dataset1_sorted.sam $DATA_DIR/Dataset1.sam
+samtools sort -O sam -o $DIR/Dataset2_sorted.sam $DATA_DIR/Dataset2.sam
+samtools sort -O sam -o $DIR/Dataset3_sorted.sam $DATA_DIR/Dataset3.sam
+samtools sort -O sam -o $DIR/paired_end_sorted.sam $DATA_DIR/paired_end.sam
+
+# Run deduper script
+echo "Deduping Dataset1_sorted.sam."
+python claridge_deduper.py --file $DIR/Dataset1_sorted.sam --umi $DIR/STL96.txt
+
+echo "Deduping Dataset2_sorted.sam."
+python claridge_deduper.py --file $DIR/Dataset2_sorted.sam --umi $DIR/STL96.txt
+
+echo "Deduping Dataset3_sorted.sam."
+python claridge_deduper.py --file $DIR/Dataset23_sorted.sam --umi $DIR/STL96.txt
+
+echo "Deduping paired_end_sorted.sam."
+python claridge_deduper.py --file $DIR/paired_end_sorted.sam --umi $DIR/STL96.txt --paired
+
+echo "Finished deduping all three SAM files."
+exit
