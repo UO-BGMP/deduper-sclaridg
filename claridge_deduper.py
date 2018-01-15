@@ -250,6 +250,11 @@ if args.paired == False:
 		  
 				### Check bitwise flag (convert to int type)
 				flag = int(line_list[1])
+				
+				# Check if paired-end data
+				if ((flag & 1) == 1):
+					raise ValueError("ERROR: Exiting program. This is not single-end data.")
+				
 				# Check strand
 				strand = strand_checker(flag)
 
